@@ -1,50 +1,32 @@
-#include "Session.hpp"
 #include <iostream>
 #include <boost/asio.hpp>
 #include <memory>
+#include "Connector.hpp"
+#include "DatabaseHandler.hpp"
 
 using namespace boost::asio;
 using namespace std;
 
-// Прием входящих подключений
-class Connector {
-private:
-    io_context& context;    //взаимодействие с ос
-    ip::tcp::acceptor& acceptor;    //сетевой протокол
-    shared_ptr<ip::tcp::socket> socket;    //объект ввода/вывода
-    const unsigned int port;
-
-    // Потоковое подключение
-    void async_connect() {
-        socket = make_shared<ip::tcp::socket>(context);
-        acceptor.async_accept(*socket, [this](boost::system::error_code ec) {
-            if (!ec) {
-                join();
-            }
-            });
-    }
-
-    // Подключение клиента
-    void join() {
-        Session* session = new Session(socket);
-        async_connect();
-    }
-
-public:
-    Connector(io_context& context, ip::tcp::acceptor& acceptor, unsigned int port)
-        : context{ context }, acceptor{ acceptor }, port{ port }
-    {
-        cout << "Сервер запущен порт " << port << endl;
-        async_connect();
-    }
-};
-
-int main(int argc, char* argv[]) {
+int main() {
     setlocale(LC_ALL, "ru");
     unsigned int port = 52777;
-    io_context context;
-    ip::tcp::acceptor acceptor(context, ip::tcp::endpoint(ip::tcp::v4(), port));
-    Connector connector(context, acceptor, port);
-    context.run();
+
+    try {
+        boost::asio::io_context io_context;
+
+        // Инициализация базы данных
+        DatabaseHandler db_handler("database/chat.db");
+
+        // Запуск сервера на порту
+        Connector connector(io_context, port, db_handler);
+
+        cout << "Сервер запущен, порт " << port <<endl;
+        io_context.run();
+    }
+    catch (exception& e) {
+        cerr << "Исключение: " << e.what() << endl;
+        return 1;
+    }
+
     return 0;
 }
