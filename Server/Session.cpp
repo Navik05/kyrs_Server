@@ -1,9 +1,7 @@
 #include "Session.hpp"
 
 Session::Session(shared_ptr<ip::tcp::socket> socket, DatabaseHandler& db_handler)
-	:socket(move(socket)), db_handler_(db_handler) {
-	start();
-}
+	:socket(move(socket)), db_handler_(db_handler) {}
 
 void Session::start() {
 	do_read();

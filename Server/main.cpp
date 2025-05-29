@@ -15,11 +15,13 @@ int main() {
         io_context context;
 
         // Инициализация MySQL базы данных
-        DatabaseHandler db_handler("localhost",  // хост
-            "chat_user",   // пользователь
-            "chat_password", // пароль
-            "chat_db",     // имя базы данных
-            3306);         // порт
+        DatabaseHandler db_handler(
+            "127.0.0.1",        // хост
+            "chat_user",        // пользователь
+            "chat_password",    // пароль
+            "chat_db",          // имя базы данных
+            3306                // порт
+        );         
 
         // Запуск сервера на порту
         Connector connector(context, port, db_handler);

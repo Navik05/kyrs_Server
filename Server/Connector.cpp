@@ -21,7 +21,8 @@ void Connector::start_accept() {
 void Connector::handle_accept(shared_ptr<ip::tcp::socket> socket,
     const boost::system::error_code& error) {
     if (!error) {
-        make_shared<Session>(socket, db_handler_)->start();
+        auto session = make_shared<Session>(socket, db_handler_);
+        session->start();
     }
     start_accept();
 }

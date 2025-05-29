@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Boost 1.66 REQUIRED COMPONENTS system)
 find_package(MySQL REQUIRED)
+include_directories(${MYSQL_INCLUDE_DIRS})
+target_link_libraries(chat_server ${MYSQL_LIBRARIES})
 
 include_directories(
     include
