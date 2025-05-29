@@ -4,7 +4,7 @@ project(Server)
 set(CMAKE_CXX_STANDARD 20)
 
 find_package(Boost 1.66 REQUIRED COMPONENTS system)
-find_package(SQLite3 REQUIRED)
+find_package(MySQL REQUIRED)
 
 include_directories(
     include
@@ -21,6 +21,6 @@ add_executable(server
 
 target_link_libraries(server
     ${Boost_LIBRARIES}
-    ${SQLite3_LIBRARIES}
+    MySQL::MySQL
     nlohmann_json::nlohmann_json
 )

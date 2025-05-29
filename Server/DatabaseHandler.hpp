@@ -1,5 +1,5 @@
 #pragma once
-#include "sqlite3.h"
+#include <mysql.h>
 #include <string>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -10,19 +10,29 @@ using namespace std;
 
 class DatabaseHandler {
 public:
-    DatabaseHandler(const string& db_path);
+    DatabaseHandler(const string& host,
+        const string& user,
+        const string& password,
+        const string& database,
+        unsigned int port = 3306);
     ~DatabaseHandler();
 
+    bool connect();
     bool authenticate_user(const string& username, const string& password_hash);
-    //bool register_user(const string& username, const string& password_hash);
-    //void save_message(const string& from, const string& to,
-        //const string& content, bool is_group);
-    //json get_message_history(const string& user1, const string& user2);
+    bool register_user(const string& username, const string& password_hash);
+    void save_message(const string& from, const string& to,
+        const string& content, bool is_group);
+    json get_message_history(const string& user1, const string& user2);
 
 private:
-    sqlite3* db_;
+    MYSQL* connection_;
     mutex db_mutex_;
+    string host_;
+    string user_;
+    string password_;
+    string database_;
+    unsigned int port_;
 
-    void initialize_db();
-    //static int callback(void* data, int argc, char** argv, char** azColName);
+    bool execute_query(const string& query);
+    bool initialize_db();
 };

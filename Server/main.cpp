@@ -12,16 +12,20 @@ int main() {
     unsigned int port = 52777;
 
     try {
-        boost::asio::io_context io_context;
+        io_context context;
 
-        // Инициализация базы данных
-        DatabaseHandler db_handler("database/chat.db");
+        // Инициализация MySQL базы данных
+        DatabaseHandler db_handler("localhost",  // хост
+            "chat_user",   // пользователь
+            "chat_password", // пароль
+            "chat_db",     // имя базы данных
+            3306);         // порт
 
         // Запуск сервера на порту
-        Connector connector(io_context, port, db_handler);
+        Connector connector(context, port, db_handler);
 
-        cout << "Сервер запущен, порт " << port <<endl;
-        io_context.run();
+        cout << "Сервер запущен, порт " << port << endl;
+        context.run();
     }
     catch (exception& e) {
         cerr << "Исключение: " << e.what() << endl;
