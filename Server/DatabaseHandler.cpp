@@ -56,6 +56,21 @@ bool DatabaseHandler::initialize_db() {
         "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
         "FOREIGN KEY (sender_id) REFERENCES users(id), "
         "FOREIGN KEY (receiver_id) REFERENCES users(id))"
+
+        //"CREATE TABLE IF NOT EXISTS groups ("
+        //"id INT AUTO_INCREMENT PRIMARY KEY, "
+        //"name VARCHAR(255) NOT NULL, "
+        //"created_by INT NOT NULL, "
+        //"created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        //"FOREIGN KEY (created_by) REFERENCES users(id))",
+
+        //"CREATE TABLE IF NOT EXISTS group_members ("
+        //"group_id INT NOT NULL, "
+        //"user_id INT NOT NULL, "
+        //"joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        //"PRIMARY KEY (group_id, user_id), "
+        //"FOREIGN KEY (group_id) REFERENCES groups(id), "
+        //"FOREIGN KEY (user_id) REFERENCES users(id))"
     };
 
     for (const auto& query : queries) {
@@ -63,6 +78,7 @@ bool DatabaseHandler::initialize_db() {
             return false;
         }
     }
+
     return true;
 }
 
@@ -99,18 +115,6 @@ bool DatabaseHandler::authenticate_user(const string& username, const string& pa
 
     mysql_free_result(result);
     return auth_success;
-}
-
-bool DatabaseHandler::register_user(const string& username, const string& password_hash) {
-    lock_guard<mutex> lock(db_mutex_);
-    string query = "INSERT INTO users (username, password_hash) VALUES ('" +
-        username + "', '" + password_hash + "')";
-
-    if (mysql_query(connection_, query.c_str()) != 0) {
-        cerr << "Ошибка запроса MySQL: " << mysql_error(connection_) << endl;
-        return false;
-    }
-    return mysql_affected_rows(connection_) == 1;
 }
 
 void DatabaseHandler::save_message(const string& from, const string& to,
@@ -170,4 +174,117 @@ json DatabaseHandler::get_message_history(const string& user1, const string& use
 
     mysql_free_result(sql_result);
     return result;
+}
+
+bool DatabaseHandler::create_group(const string& group_name, const string& creator_username) {
+    lock_guard<mutex> lock(db_mutex_);
+    string query = "INSERT INTO groups (name, created_by) "
+        "VALUES ('" + group_name + "', "
+        "(SELECT id FROM users WHERE username = '" + creator_username + "'))";
+    return execute_query(query);
+}
+
+bool DatabaseHandler::add_user_to_group(const string& username, const string& group_name) {
+    lock_guard<mutex> lock(db_mutex_);
+    string query = "INSERT INTO group_members (group_id, user_id) "
+        "VALUES ((SELECT id FROM groups WHERE name = '" + group_name + "'), "
+        "(SELECT id FROM users WHERE username = '" + username + "'))";
+    return execute_query(query);
+}
+
+json DatabaseHandler::get_group_members(const string& group_name) {
+    lock_guard<mutex> lock(db_mutex_);
+    json members = json::array(); // Возвращаем массив имен пользователей
+
+    // Запрос для получения всех участников группы
+    string query =
+        "SELECT u.username FROM group_members gm "
+        "JOIN users u ON gm.user_id = u.id "
+        "JOIN groups g ON gm.group_id = g.id "
+        "WHERE g.name = '" + group_name + "'";
+
+    if (mysql_query(connection_, query.c_str()) != 0) {
+        cerr << "Ошибка запроса MySQL: " << mysql_error(connection_) << endl;
+        return members;
+    }
+
+    MYSQL_RES* result = mysql_store_result(connection_);
+    if (!result) {
+        return members;
+    }
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result))) {
+        if (row[0]) { // Проверяем, что имя пользователя не NULL
+            members.push_back(row[0]);
+        }
+    }
+
+    mysql_free_result(result);
+    return members;
+}
+
+json DatabaseHandler::get_user_groups(const string& username) {
+    lock_guard<mutex> lock(db_mutex_);
+    json groups = json::array(); // Возвращаем массив групп
+
+    // Запрос для получения всех групп пользователя
+    string query =
+        "SELECT g.id, g.name, g.created_at FROM groups g "
+        "JOIN group_members gm ON g.id = gm.group_id "
+        "JOIN users u ON gm.user_id = u.id "
+        "WHERE u.username = '" + username + "'";
+
+    if (mysql_query(connection_, query.c_str()) != 0) {
+        cerr << "Ошибка запроса MySQL (get_user_groups): " << mysql_error(connection_) << endl;
+        return groups; // Пустой массив при ошибке
+    }
+
+    MYSQL_RES* result = mysql_store_result(connection_);
+    if (!result) {
+        return groups;
+    }
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result))) {
+        json group_info = {
+            {"group_id", row[0]},
+            {"group_name", row[1]},
+            {"created_at", row[2]}
+        };
+        groups.push_back(group_info);
+    }
+
+    mysql_free_result(result);
+    return groups;
+}
+
+bool DatabaseHandler::register_user(const string& username, const string& password_hash) {
+    lock_guard<mutex> lock(db_mutex_);
+
+    // 1. Проверка существования пользователя (упрощённая версия)
+    string check_query = "SELECT id FROM users WHERE username = '" + username + "'";
+    if (mysql_query(connection_, check_query.c_str()) ){
+        cerr << "Ошибка проверки пользователя: " << mysql_error(connection_) << endl;
+        return false;
+    }
+
+    MYSQL_RES* result = mysql_store_result(connection_);
+        if (result && mysql_num_rows(result) > 0) {
+            cerr << "Пользователь уже существует" << endl;
+            mysql_free_result(result);
+            return false;
+        }
+    if (result) mysql_free_result(result);
+
+    // 2. Регистрация нового пользователя
+    string insert_query = "INSERT INTO users (username, password_hash) VALUES ('" +
+        username + "', '" + password_hash + "')";
+
+    if (mysql_query(connection_, insert_query.c_str())) {
+        cerr << "Ошибка регистрации: " << mysql_error(connection_) << endl;
+        return false;
+    }
+
+    return mysql_affected_rows(connection_) == 1;
 }

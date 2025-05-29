@@ -16,13 +16,16 @@ public:
         const string& database,
         unsigned int port = 3306);
     ~DatabaseHandler();
-
     bool connect();
     bool authenticate_user(const string& username, const string& password_hash);
     bool register_user(const string& username, const string& password_hash);
     void save_message(const string& from, const string& to,
         const string& content, bool is_group);
     json get_message_history(const string& user1, const string& user2);
+    bool create_group(const string& group_name, const string& creator_username);
+    bool add_user_to_group(const string& username, const string& group_name);
+    json get_group_members(const string& group_name);
+    json get_user_groups(const string& username);
 
 private:
     MYSQL* connection_;

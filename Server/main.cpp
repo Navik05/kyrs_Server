@@ -14,17 +14,15 @@ int main() {
     try {
         io_context context;
 
-        // »нициализаци€ MySQL базы данных
         DatabaseHandler db_handler(
-            "127.0.0.1",        // хост
-            "chat_user",        // пользователь
-            "chat_password",    // пароль
-            "chat_db",          // им€ базы данных
-            3306                // порт
-        );         
+            "127.0.0.1",
+            "chat_user",
+            "chat_password",
+            "chat_db",
+            3306
+        );
 
-        // «апуск сервера на порту
-        Connector connector(context, port, db_handler);
+        auto connector = make_shared<Connector>(context, port, db_handler);
 
         cout << "—ервер запущен, порт " << port << endl;
         context.run();
