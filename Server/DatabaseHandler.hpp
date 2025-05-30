@@ -17,6 +17,7 @@ public:
         unsigned int port = 3306);
     ~DatabaseHandler();
     bool connect();
+    // Методы работы с пользователями
     bool authenticate_user(const string& username, const string& password_hash);
     bool register_user(const string& username, const string& password_hash);
     void save_message(const string& from, const string& to,
@@ -35,7 +36,6 @@ private:
     string password_;
     string database_;
     unsigned int port_;
-
     bool execute_query(const string& query);
     bool initialize_db();
 };

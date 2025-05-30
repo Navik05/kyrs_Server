@@ -9,11 +9,15 @@ using namespace std;
 
 int main() {
     setlocale(LC_ALL, "ru");
+
+    // Порт на котором будет работать сервер
     unsigned int port = 52777;
 
     try {
+        // Создание контекста ввода-вывода 
         io_context context;
 
+        // Создание объекта БД
         DatabaseHandler db_handler(
             "127.0.0.1",
             "chat_user",
@@ -22,6 +26,7 @@ int main() {
             3306
         );
 
+        // Общий указатель на сервер
         auto connector = make_shared<Connector>(context, port, db_handler);
 
         cout << "Сервер запущен, порт " << port << endl;

@@ -8,7 +8,7 @@ DatabaseHandler::DatabaseHandler(const string& host,
     unsigned int port)
     : host_(host), user_(user), password_(password),
     database_(database), port_(port) {
-    connection_ = mysql_init(nullptr);
+    connection_ = mysql_init(nullptr);  // Инициализация соединения
     if (!connection_) {
         throw runtime_error("Не удалось выполнить инициализацию MySQL");
     }
@@ -23,8 +23,8 @@ DatabaseHandler::DatabaseHandler(const string& host,
 }
 
 DatabaseHandler::~DatabaseHandler() {
-    if (connection_) {
-        mysql_close(connection_);
+    if (connection_) {  
+        mysql_close(connection_);   // Закрытие соединения при уничтожении объекта
     }
 }
 
@@ -41,12 +41,14 @@ bool DatabaseHandler::connect() {
 
 bool DatabaseHandler::initialize_db() {
     const vector<string> queries = {
+        // Создание таблицы пользователей
         "CREATE TABLE IF NOT EXISTS users ("
         "id INT AUTO_INCREMENT PRIMARY KEY, "
         "username VARCHAR(255) UNIQUE NOT NULL, "
         "password_hash VARCHAR(255) NOT NULL, "
         "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
 
+        // Создание таблицы сообщений
         "CREATE TABLE IF NOT EXISTS messages ("
         "id INT AUTO_INCREMENT PRIMARY KEY, "
         "sender_id INT NOT NULL, "
@@ -74,7 +76,8 @@ bool DatabaseHandler::initialize_db() {
     };
 
     for (const auto& query : queries) {
-        if (!execute_query(query)) {
+        // Выполнение каждого запроса
+        if (!execute_query(query)) {    
             return false;
         }
     }
@@ -82,6 +85,7 @@ bool DatabaseHandler::initialize_db() {
     return true;
 }
 
+// Базовый метод выполнения запросов
 bool DatabaseHandler::execute_query(const string& query) {
     lock_guard<mutex> lock(db_mutex_);
     if (mysql_query(connection_, query.c_str()) != 0) {
@@ -91,6 +95,7 @@ bool DatabaseHandler::execute_query(const string& query) {
     return true;
 }
 
+// Проверка авторизации
 bool DatabaseHandler::authenticate_user(const string& username, const string& password_hash) {
     lock_guard<mutex> lock(db_mutex_);
     string query = "SELECT password_hash FROM users WHERE username = '" +
@@ -259,10 +264,11 @@ json DatabaseHandler::get_user_groups(const string& username) {
     return groups;
 }
 
+// Регистрация пользователя
 bool DatabaseHandler::register_user(const string& username, const string& password_hash) {
     lock_guard<mutex> lock(db_mutex_);
 
-    // 1. Проверка существования пользователя (упрощённая версия)
+    // Проверка существования пользователя
     string check_query = "SELECT id FROM users WHERE username = '" + username + "'";
     if (mysql_query(connection_, check_query.c_str()) ){
         cerr << "Ошибка проверки пользователя: " << mysql_error(connection_) << endl;
@@ -277,7 +283,7 @@ bool DatabaseHandler::register_user(const string& username, const string& passwo
         }
     if (result) mysql_free_result(result);
 
-    // 2. Регистрация нового пользователя
+    // Регистрация нового пользователя
     string insert_query = "INSERT INTO users (username, password_hash) VALUES ('" +
         username + "', '" + password_hash + "')";
 

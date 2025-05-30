@@ -10,8 +10,7 @@ using json = nlohmann::json;
 using namespace boost::asio;
 using namespace std;
 
-class Connector; // Forward declaration
-
+class Connector;
 class Session : public enable_shared_from_this<Session> {
 private:
     shared_ptr<ip::tcp::socket> socket;
