@@ -10,69 +10,41 @@ void Session::start() {
 }
 
 void Session::do_read() {
-    cout << "Ожидание данных от клиента..." << endl;
-    auto self(shared_from_this());      // shared_ptr на текущий объект
-    buffer_.resize(4);  // Сначала читаем 4 байта длины
-
-    // Асинхронное чтение длины сообщения
-    async_read(*socket, buffer(buffer_),
+    auto self(shared_from_this());
+    buffer_.clear();
+    // Читаем до символа разделителя ('\0')
+    async_read_until(*socket, dynamic_string_buffer(buffer_), '\0',
         [this, self](boost::system::error_code ec, size_t length) {
             if (!ec) {
-                // Логирование полученных байт длины
-                cout << "Получены байты длины: ";
-                for (auto b : buffer_) cout << (int)b << " ";
-                cout << endl;
-
-                // Преобразование 4 байт в uint32_t (big-endian)
-                uint32_t msg_length = (static_cast<uint32_t>(buffer_[0]) << 24) |
-                    (static_cast<uint32_t>(buffer_[1]) << 16) |
-                    (static_cast<uint32_t>(buffer_[2]) << 8) |
-                    static_cast<uint32_t>(buffer_[3]);
-                cout << "Ожидаемая длина сообщения: " << msg_length << endl;
-
-                // Чтение тела сообщения
-                read_body(msg_length);
+                try {
+                    buffer_.resize(length - 1);             
+                    // Парсим JSON
+                    json msg = json::parse(buffer_);
+                    process_message(msg);
+                    // Продолжаем чтение
+                    do_read();
+                }
+                catch (const exception& e) {
+                    cerr << "Ошибка парсинга JSON: " << e.what() << endl;
+                    if (auto conn = connector_.lock()) conn->remove_session(self);
+                }
             }
             else {
-                cerr << "Ошибка чтения длины: " << ec.message() << endl;
                 if (auto conn = connector_.lock()) conn->remove_session(self);
             }
         });
 }
 
-void Session::read_body(size_t length) {
+// Отправка ответов клиенту
+void Session::send_response(const json& response) {
     auto self(shared_from_this());
-    buffer_.resize(length);     // Изменяем размер буфера под длину сообщения
+    auto response_str = make_shared<string>(response.dump() + '\0'); // Добавляем разделитель
 
-    // Асинхронное чтение тела сообщения
-    async_read(*socket, buffer(buffer_),
-        [this, self](boost::system::error_code ec, size_t) {
-            if (!ec) {
-                // Логирование первых 10 байт сообщения
-                cout << "Получены сырые данные: ";
-                for (size_t i = 0; i < buffer_.size() && i < 10; ++i) {
-                    cout << (int)buffer_[i] << " ";
-                }
-                cout << endl;
-
-                try {
-                    // Преобразование в строку и JSON
-                    string msg_str(buffer_.begin(), buffer_.end());
-                    cout << "Полученная строка: " << msg_str << endl;   // Логируем строку
-
-                    json msg = json::parse(buffer_);
-                    process_message(msg);
-                }
-                catch (const exception& e) {
-                    cerr << "Ошибка парсинга JSON: " << e.what() << endl;
-                }
-
-                // Цикл чтения
-                do_read();
-            }
-            else {
-                cerr << "Ошибка чтения тела: " << ec.message() << endl;
-                // Удаление сессии при ошибке
+    // Асинхронная отправка
+    async_write(*socket, buffer(*response_str),
+        [this, self, response_str](boost::system::error_code ec, size_t) {
+            if (ec) {
+                cerr << "Ошибка отправки ответа: " << ec.message() << endl;
                 if (auto conn = connector_.lock()) {
                     conn->remove_session(self);
                 }
@@ -117,15 +89,10 @@ void Session::process_message(const json& msg) {
         }
         else if (type == "register") {
             cout << "Регистрация для: " << msg["username"] << endl;
-            string username = msg["username"];
-            string password_hash = msg["password_hash"];
-
-            bool reg_result = db_handler_.register_user(username, password_hash);
-
+            string message =  db_handler_.register_user(msg["username"], msg["password_hash"]);
             json response = {
                 {"type", "register_response"},
-                {"status", reg_result ? "success" : "failure"},
-                {"message", reg_result ? "Регистрация успешна" : "Ошибка регистрации"}
+                { "message", message}
             };
             send_response(response);
         }
@@ -149,7 +116,7 @@ void Session::handle_auth(const json& msg) {
         json response = {
             {"type", "auth_response"},
             {"status", "failure"},
-            {"message", "Необходимы username и password_hash"}
+            {"message", "username and password are not specified"}
         };
         send_response(response);
         return;
@@ -164,7 +131,7 @@ void Session::handle_auth(const json& msg) {
         json response = {
             {"type", "auth_response"},
             {"status", "failure"},
-            {"message", "Имя пользователя и пароль не могут быть пустыми"}
+            {"message", "username and password cannot be empty"}
         };
         send_response(response);
         return;
@@ -183,7 +150,7 @@ void Session::handle_auth(const json& msg) {
             {"type", "auth_response"},
             {"status", "success"},
             {"username", username_},
-            {"message", "Авторизация успешна"}
+            {"message", "authorization is successful"}
         };
         cout << "Успешная авторизация: " << username_ << endl;
     }
@@ -191,7 +158,7 @@ void Session::handle_auth(const json& msg) {
         response = {
             {"type", "auth_response"},
             {"status", "failure"},
-            {"message", "Неверное имя пользователя или пароль"}
+            {"message", "invalid username or password"}
         };
         cerr << "Ошибка авторизации для: " << username << endl;
     }
@@ -211,26 +178,4 @@ void Session::handle_message(const json& msg) {
     if (auto conn = connector_.lock()) {
         conn->broadcast_message(username_, to, content);
     }
-}
-
-// Отправка ответов клиенту
-void Session::send_response(const json& response) {
-    auto self(shared_from_this());
-    string response_str = response.dump();      // JSON в строку
-    uint32_t length = response_str.size();      // Длина сообщения
-
-    // Подготовка буферов: сначала длина, затем сообщение
-    vector<const_buffer> buffers;
-    buffers.push_back(buffer(&length, sizeof(length)));
-    buffers.push_back(buffer(response_str));
-
-    // Асинхронная отправка
-    async_write(*socket, buffers,
-        [this, self](boost::system::error_code ec, size_t) {
-            if (ec) {
-                if (auto conn = connector_.lock()) {
-                    conn->remove_session(self);         // Удаление сессии при ошибке
-                }
-            }
-        });
 }

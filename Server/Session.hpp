@@ -11,6 +11,7 @@ using namespace boost::asio;
 using namespace std;
 
 class Connector;
+
 class Session : public enable_shared_from_this<Session> {
 private:
     shared_ptr<ip::tcp::socket> socket;
@@ -19,17 +20,15 @@ private:
     weak_ptr<Connector> connector_;
     string username_;
 
+    void do_read();
+    void process_message(const json& msg);
+    void handle_auth(const json& msg);
+    void handle_message(const json& msg);
+
 public:
     Session(shared_ptr<ip::tcp::socket> socket, DatabaseHandler& db_handler);
     void start();
     void set_connector(shared_ptr<Connector> connector) { connector_ = connector; }
     void send_response(const json& response);
     string get_username() const { return username_; }
-
-private:
-    void do_read();
-    void read_body(size_t length);
-    void process_message(const json& msg);
-    void handle_auth(const json& msg);
-    void handle_message(const json& msg);
 };

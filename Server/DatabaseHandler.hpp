@@ -19,7 +19,7 @@ public:
     bool connect();
     // Методы работы с пользователями
     bool authenticate_user(const string& username, const string& password_hash);
-    bool register_user(const string& username, const string& password_hash);
+    string register_user(const string& username, const string& password_hash);
     void save_message(const string& from, const string& to,
         const string& content, bool is_group);
     json get_message_history(const string& user1, const string& user2);

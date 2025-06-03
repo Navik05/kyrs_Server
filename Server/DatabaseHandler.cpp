@@ -265,21 +265,24 @@ json DatabaseHandler::get_user_groups(const string& username) {
 }
 
 // Регистрация пользователя
-bool DatabaseHandler::register_user(const string& username, const string& password_hash) {
+string DatabaseHandler::register_user(const string& username, const string& password_hash) {
     lock_guard<mutex> lock(db_mutex_);
 
+    string message;
     // Проверка существования пользователя
     string check_query = "SELECT id FROM users WHERE username = '" + username + "'";
     if (mysql_query(connection_, check_query.c_str()) ){
+        message = "User verification error";
         cerr << "Ошибка проверки пользователя: " << mysql_error(connection_) << endl;
-        return false;
+        return message;
     }
 
     MYSQL_RES* result = mysql_store_result(connection_);
         if (result && mysql_num_rows(result) > 0) {
+            message = "The user already exists";
             cerr << "Пользователь уже существует" << endl;
             mysql_free_result(result);
-            return false;
+            return message;
         }
     if (result) mysql_free_result(result);
 
@@ -288,9 +291,10 @@ bool DatabaseHandler::register_user(const string& username, const string& passwo
         username + "', '" + password_hash + "')";
 
     if (mysql_query(connection_, insert_query.c_str())) {
+        message = "Registration error";
         cerr << "Ошибка регистрации: " << mysql_error(connection_) << endl;
-        return false;
+        return message;
     }
 
-    return mysql_affected_rows(connection_) == 1;
+    mysql_affected_rows(connection_) == 1;
 }
