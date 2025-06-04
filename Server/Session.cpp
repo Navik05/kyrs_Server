@@ -12,10 +12,10 @@ void Session::start() {
 void Session::do_read() {
     auto self(shared_from_this());
     buffer_.clear();
-    // Читаем до символа разделителя ('\0')
+    // Читаем до символа разделителя '\0'
     async_read_until(*socket, dynamic_string_buffer(buffer_), '\0',
         [this, self](boost::system::error_code ec, size_t length) {
-            if (!ec) {
+            if (!ec && length > 0) {
                 try {
                     buffer_.resize(length - 1);             
                     // Парсим JSON
@@ -30,7 +30,10 @@ void Session::do_read() {
                 }
             }
             else {
-                if (auto conn = connector_.lock()) conn->remove_session(self);
+                if (ec != error::operation_aborted) {
+                    cerr << "Ошибка чтения: " << ec.message() << endl;
+                    if (auto conn = connector_.lock()) conn->remove_session(self);
+                }
             }
         });
 }
@@ -58,10 +61,11 @@ void Session::process_message(const json& msg) {
         json response;
         string type = msg["type"];
         cout << "Получен запрос типа: " << type << endl;
-
+        // Авторизация
         if (type == "auth") {
-            response = handle_auth(msg);   // Авторизация
+            response = handle_auth(msg);
         }
+        // Регистрация
         else if (type == "register") {
             string message = db_handler_.register_user(msg["username"], msg["password_hash"]);
             response = {
@@ -69,47 +73,45 @@ void Session::process_message(const json& msg) {
                 { "message", message}
             };
         }
-        else if (type == "create_group") {
-            string group_name = msg["group_name"];
-            if (db_handler_.create_group(group_name, username_)) {
-                response = { {"type", "group_created"}, {"group_name", group_name} };
+        // Создание группы
+        else if (type == "create_team") {
+            if (db_handler_.create_team(msg["team_name"], username_)) {
+                response = { {"type", "team_created"}, {"team_name", msg["team_name"]} };
             }
         }
-        else if (type == "invite_to_group") {       // Приглашение в группу
-            string group_name = msg["group_name"];
-            string user_to_add = msg["user"];
-            if (db_handler_.add_user_to_group(user_to_add, group_name)) {
-                response = { {"type", "user_added"}, {"group_name", group_name} };
+        // Приглашение в группу
+        else if (type == "invite_to_team") {       
+            if (db_handler_.add_user_to_team(msg["user"], msg["team_name"])) {
+                response = { {"type", "user_added"}, {"team_name", msg["team_name"]} };
             }
         }
+        // Передача истории чата
         else if (type == "get_chat_messages") {
-            string chat_id = msg["chat_id"];
-            bool is_group = msg["is_group"];
-            json messages = db_handler_.get_chat_messages(username_, chat_id, is_group);
+            json messages = db_handler_.get_chat_messages(username_, msg["chat_id"], msg["is_team"]);
             response = {
                 {"type", "chat_messages"},
-                {"chat_id", chat_id},
-                {"is_group", is_group},
+                {"chat_id", msg["chat_id"]},
+                {"is_team", msg["is_team"]},
                 {"messages", messages}
             };
         }
-
-        send_response(response);
-
-        if (type == "message") {
-            handle_message(msg, false);        // Личное сообщение
+        // Личное сообщение
+        else if (type == "message") {
+            handle_message(msg, false);
+            return;
         }
-        else if (type == "group_message") {     // Групповое сообщение
+        // Групповое сообщение
+        else if (type == "team_message") {
             handle_message(msg, true);
+            return;
         }
         else {
             response = {
                 {"type", "error"},
                 {"message", "Unknown message type"}
             };
-            send_response(response);
         }
-        
+        send_response(response);
     }
     catch (const exception& e) {
         cerr << "Ошибка при обработке сообщения: " << e.what() << endl;
@@ -169,15 +171,20 @@ json Session::handle_auth(const json& msg) {
 }
 
 // Обработка сообщения
-void Session::handle_message(const json& msg, bool is_group) {
+void Session::handle_message(const json& msg, bool is_team) {
     string to = msg["to"];
     string content = msg["content"];
 
     // Сохраняем сообщение в БД
-    db_handler_.save_message(username_, to, content, is_group);
+    db_handler_.save_message(username_, to, content, is_team);
+    cout << "Сообщение сохранено в БД: от " << username_
+        << " к " << to << (is_team ? " (группа)" : "") << endl;
 
     // Пересылаем сообщение всем клиентам
     if (auto conn = connector_.lock()) {
-        conn->broadcast_message(username_, to, content, is_group);
+        conn->broadcast_message(username_, to, content, is_team);
+    }
+    else {
+     cerr << "Ошибка: не удалось получить Connector для рассылки сообщения" << endl;
     }
 }

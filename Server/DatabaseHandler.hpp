@@ -21,12 +21,12 @@ public:
     bool authenticate_user(const string& username, const string& password_hash);
     string register_user(const string& username, const string& password_hash);
     void save_message(const string& from, const string& to,
-        const string& content, bool is_group);
-    json get_chat_messages(const string& username, const string& chat_id, bool is_group);
-    bool create_group(const string& group_name, const string& creator_username);
-    bool add_user_to_group(const string& username, const string& group_name);
-    json get_group_members(const string& group_name);
-    json get_user_groups(const string& username);
+        const string& content, bool is_team);
+    json get_chat_messages(const string& username, const string& chat_id, bool is_team);
+    bool create_team(const string& team_name, const string& creator_username);
+    bool add_user_to_team(const string& username, const string& team_name);
+    json get_team_members(const string& team_name);
+    json get_user_team(const string& username);
 
 private:
     MYSQL* connection_;
