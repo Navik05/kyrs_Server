@@ -10,6 +10,7 @@ using namespace std;
 
 class DatabaseHandler {
 public:
+    MYSQL* connection_;
     DatabaseHandler(const string& host,
         const string& user,
         const string& password,
@@ -17,7 +18,6 @@ public:
         unsigned int port = 3306);
     ~DatabaseHandler();
     bool connect();
-    // Методы работы с пользователями
     bool authenticate_user(const string& username, const string& password_hash);
     string register_user(const string& username, const string& password_hash);
     void save_message(const string& from, const string& to,
@@ -27,15 +27,14 @@ public:
     bool add_user_to_team(const string& username, const string& team_name);
     json get_team_members(const string& team_name);
     json get_user_team(const string& username);
+    bool execute_query(const string& query);
 
 private:
-    MYSQL* connection_;
     mutex db_mutex_;
     string host_;
     string user_;
     string password_;
     string database_;
     unsigned int port_;
-    bool execute_query(const string& query);
     bool initialize_db();
 };

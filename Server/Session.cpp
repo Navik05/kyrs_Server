@@ -76,7 +76,25 @@ void Session::process_message(const json& msg) {
         // Создание группы
         else if (type == "create_team") {
             if (db_handler_.create_team(msg["team_name"], username_)) {
-                response = { {"type", "team_created"}, {"team_name", msg["team_name"]} };
+                // Автоматически добавляем создателя в группу
+                if (db_handler_.add_user_to_team(username_, msg["team_name"])) {
+                    response = {
+                        {"type", "team_created"},
+                        {"team_name", msg["team_name"]}
+                    };
+                }
+                else {
+                    response = {
+                        {"type", "error"},
+                        {"message", "Failed to add creator to team"}
+                    };
+                }
+            }
+            else {
+                response = {
+                    {"type", "error"},
+                    {"message", "Failed to create team"}
+                };
             }
         }
         // Приглашение в группу
@@ -94,6 +112,10 @@ void Session::process_message(const json& msg) {
                 {"is_team", msg["is_team"]},
                 {"messages", messages}
             };
+        }
+        // Список чатов
+        else if (type == "get_chat_list") {
+            response = get_available_chats();
         }
         // Личное сообщение
         else if (type == "message") {
@@ -174,12 +196,8 @@ json Session::handle_auth(const json& msg) {
 void Session::handle_message(const json& msg, bool is_team) {
     string to = msg["to"];
     string content = msg["content"];
-
     // Сохраняем сообщение в БД
     db_handler_.save_message(username_, to, content, is_team);
-    cout << "Сообщение сохранено в БД: от " << username_
-        << " к " << to << (is_team ? " (группа)" : "") << endl;
-
     // Пересылаем сообщение всем клиентам
     if (auto conn = connector_.lock()) {
         conn->broadcast_message(username_, to, content, is_team);
@@ -187,4 +205,32 @@ void Session::handle_message(const json& msg, bool is_team) {
     else {
      cerr << "Ошибка: не удалось получить Connector для рассылки сообщения" << endl;
     }
+}
+
+json Session::get_available_chats() {
+    json response;
+
+    // Получаем список всех пользователей
+    string users_query = "SELECT username FROM users";
+    if (db_handler_.execute_query(users_query)) {
+        MYSQL_RES* users_result = mysql_store_result(db_handler_.connection_);
+        if (users_result) {
+            json users = json::array();
+            MYSQL_ROW row;
+            while ((row = mysql_fetch_row(users_result))) {
+                users.push_back(row[0]);
+            }
+            response["users"] = users;
+            mysql_free_result(users_result);
+        }
+    }
+
+    // Получаем список групп текущего пользователя
+    json teams = db_handler_.get_user_team(username_);
+    response["teams"] = teams;
+
+    return {
+        {"type", "chat_list"},
+        {"data", response}
+    };
 }

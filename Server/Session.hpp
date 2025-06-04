@@ -31,4 +31,5 @@ public:
     void set_connector(shared_ptr<Connector> connector) { connector_ = connector; }
     void send_response(const json& response);
     string get_username() const { return username_; }
+    json get_available_chats();
 };

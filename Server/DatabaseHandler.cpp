@@ -121,14 +121,13 @@ bool DatabaseHandler::authenticate_user(const string& username, const string& pa
     return auth_success;
 }
 
-void DatabaseHandler::save_message(const string& from, const string& to,
-    const string& content, bool is_team) {
+void DatabaseHandler::save_message(const string& from, const string& to, const string& content, bool is_team) {
     string query;
 
     if (is_team) {
         query = "INSERT INTO messages (sender_id, team_id, content) "
             "VALUES ((SELECT id FROM users WHERE username = '" + from + "'), "
-            "'" + to + "', '" + content + "')";
+            "(SELECT id FROM team WHERE name = '" + to + "'), '" + content + "')";
     }
     else {
         query = "INSERT INTO messages (sender_id, receiver_id, content) "
@@ -254,8 +253,8 @@ json DatabaseHandler::get_chat_messages(const string& username, const string& ch
             "SELECT u.username as sender, m.content, m.timestamp "
             "FROM messages m "
             "JOIN users u ON m.sender_id = u.id "
-            "WHERE m.team_id = (SELECT id FROM team WHERE name = '" + chat_id + "') "
-            "ORDER BY m.timestamp";
+            "WHERE m.team_id = (SELECT id FROM team WHERE name = '" + chat_id + "')  "
+            "ORDER BY m.timestamp ASC";
     }
     else {
         query =

@@ -80,12 +80,9 @@ void Connector::broadcast_message(const string& from, const string& target, cons
         if (recipients.count(username) > 0) {
             try {
                 session->send_response(message);
-                cout << "Сообщение отправлено " << username
-                    << " (сессия: " << session.get() << ")" << endl;
             }
             catch (const exception& e) {
-                cerr << "Ошибка отправки для " << username
-                    << ": " << e.what() << endl;
+                cerr << "Ошибка отправки для " << username << ": " << e.what() << endl;
             }
         }
     }
