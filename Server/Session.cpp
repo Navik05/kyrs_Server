@@ -55,54 +55,61 @@ void Session::send_response(const json& response) {
 // Обработка сообщений
 void Session::process_message(const json& msg) {
     try {
+        json response;
         string type = msg["type"];
-        cout << "Получен запрос типа: " << type << endl; // Логирование
+        cout << "Получен запрос типа: " << type << endl;
 
         if (type == "auth") {
-            handle_auth(msg);   // Авторизация
+            response = handle_auth(msg);   // Авторизация
         }
-        else if (type == "message") {
-            handle_message(msg);        // Личное сообщение
+        else if (type == "register") {
+            string message = db_handler_.register_user(msg["username"], msg["password_hash"]);
+            response = {
+                {"type", "register_response"},
+                { "message", message}
+            };
         }
         else if (type == "create_group") {
             string group_name = msg["group_name"];
             if (db_handler_.create_group(group_name, username_)) {
-                json response = { {"type", "group_created"}, {"group_name", group_name} };
-                send_response(response);
+                response = { {"type", "group_created"}, {"group_name", group_name} };
             }
         }
         else if (type == "invite_to_group") {       // Приглашение в группу
             string group_name = msg["group_name"];
             string user_to_add = msg["user"];
             if (db_handler_.add_user_to_group(user_to_add, group_name)) {
-                json response = { {"type", "user_added"}, {"group_name", group_name} };
-                send_response(response);
+                response = { {"type", "user_added"}, {"group_name", group_name} };
             }
+        }
+        else if (type == "get_chat_messages") {
+            string chat_id = msg["chat_id"];
+            bool is_group = msg["is_group"];
+            json messages = db_handler_.get_chat_messages(username_, chat_id, is_group);
+            response = {
+                {"type", "chat_messages"},
+                {"chat_id", chat_id},
+                {"is_group", is_group},
+                {"messages", messages}
+            };
+        }
+
+        send_response(response);
+
+        if (type == "message") {
+            handle_message(msg, false);        // Личное сообщение
         }
         else if (type == "group_message") {     // Групповое сообщение
-            string group_name = msg["to"];  // to — это имя группы
-            string content = msg["content"];
-            db_handler_.save_message(username_, group_name, content, true);  // is_group = true
-            if (auto conn = connector_.lock()) {
-                conn->broadcast_group_message(username_, group_name, content);
-            }
-        }
-        else if (type == "register") {
-            cout << "Регистрация для: " << msg["username"] << endl;
-            string message =  db_handler_.register_user(msg["username"], msg["password_hash"]);
-            json response = {
-                {"type", "register_response"},
-                { "message", message}
-            };
-            send_response(response);
+            handle_message(msg, true);
         }
         else {
-            json response = {
+            response = {
                 {"type", "error"},
                 {"message", "Unknown message type"}
             };
             send_response(response);
         }
+        
     }
     catch (const exception& e) {
         cerr << "Ошибка при обработке сообщения: " << e.what() << endl;
@@ -110,16 +117,16 @@ void Session::process_message(const json& msg) {
 }
 
 // Обработка авторизации
-void Session::handle_auth(const json& msg) {
+json Session::handle_auth(const json& msg) {
+    json response;
     // Проверяем наличие обязательных полей
     if (!msg.contains("username") || !msg.contains("password_hash")) {
-        json response = {
+        response = {
             {"type", "auth_response"},
             {"status", "failure"},
             {"message", "username and password are not specified"}
         };
-        send_response(response);
-        return;
+        return response;
     }
 
     // Получаем данные из JSON
@@ -128,22 +135,18 @@ void Session::handle_auth(const json& msg) {
 
     // Валидация данных
     if (username.empty() || password_hash.empty()) {
-        json response = {
+        response = {
             {"type", "auth_response"},
             {"status", "failure"},
             {"message", "username and password cannot be empty"}
         };
-        send_response(response);
-        return;
+        return response;
     }
-
-    cout << "Попытка авторизации: " << username << endl;
 
     // Аутентификация пользователя
     bool auth_result = db_handler_.authenticate_user(username, password_hash);
 
     // Формируем ответ
-    json response;
     if (auth_result) {
         username_ = username; // Сохраняем имя пользователя в сессии
         response = {
@@ -162,20 +165,19 @@ void Session::handle_auth(const json& msg) {
         };
         cerr << "Ошибка авторизации для: " << username << endl;
     }
-
-    send_response(response);
+    return response;
 }
 
 // Обработка сообщения
-void Session::handle_message(const json& msg) {
+void Session::handle_message(const json& msg, bool is_group) {
     string to = msg["to"];
     string content = msg["content"];
 
     // Сохраняем сообщение в БД
-    db_handler_.save_message(username_, to, content, false);
+    db_handler_.save_message(username_, to, content, is_group);
 
     // Пересылаем сообщение всем клиентам
     if (auto conn = connector_.lock()) {
-        conn->broadcast_message(username_, to, content);
+        conn->broadcast_message(username_, to, content, is_group);
     }
 }

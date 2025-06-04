@@ -51,43 +51,40 @@ void Connector::remove_session(shared_ptr<Session> session) {
     sessions_.erase(session);                   // Удаление сессии из множества
 }
 
-void Connector::broadcast_message(const string& from, const string& to, const string& content) {
+void Connector::broadcast_message(const string& from, const string& target, const string& content, bool is_group){
     lock_guard<mutex> lock(sessions_mutex_);
+
     // Создание JSON-сообщения
     json message = {
-        {"type", "message"},            // Тип сообщения
-        {"from", from},                 // Отправитель
-        {"to", to},                     // Получатель
-        {"content", content},           // Содержимое
-        {"timestamp", time(nullptr)}    // Временная метка
+        {"type", is_group ? "group_message" : "message"},
+        {"from", from},                 
+        {"to", target},
+        {"content", content},          
+        {"timestamp", time(nullptr)}    
     };
 
-    // Рассылка сообщения всем активным сессиям
-    for (const auto& session : sessions_) {
-        session->send_response(message);
+    // Определение получателей
+    if (is_group)
+    {
+        // Для группового сообщения получаем список участников группы
+        auto members = db_handler_.get_group_members(target);
+
+        // Рассылка только участникам группы
+        for (const auto& session : sessions_) {
+            // Проверяем, является ли пользователь участником группы
+            if (find(members.begin(), members.end(), session->get_username()) != members.end()) {
+                session->send_response(message);
+            }
+        }
     }
-}
-
-void Connector::broadcast_group_message(const string& from, const string& group_name, const string& content) {
-    lock_guard<mutex> lock(sessions_mutex_);
-
-    // Получение списка участников группы из БД
-    auto members = db_handler_.get_group_members(group_name);
-
-    // Создание JSON-сообщения для группы
-    json message = {
-        {"type", "group_message"},
-        {"from", from},
-        {"to", group_name},
-        {"content", content},
-        {"timestamp", time(nullptr)}
-    };
-
-    // Рассылка только участникам группы
-    for (const auto& session : sessions_) {
-        // Проверяем, является ли пользователь участником группы
-        if (find(members.begin(), members.end(), session->get_username()) != members.end()) {
-            session->send_response(message);
+    else
+    {
+        // Для личного сообщения
+        for (const auto& session : sessions_) {
+            if (session->get_username() == target) {
+                session->send_response(message);
+                break;
+            }
         }
     }
 }

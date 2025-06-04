@@ -57,22 +57,24 @@ bool DatabaseHandler::initialize_db() {
         "content TEXT NOT NULL, "
         "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
         "FOREIGN KEY (sender_id) REFERENCES users(id), "
-        "FOREIGN KEY (receiver_id) REFERENCES users(id))"
+        "FOREIGN KEY (receiver_id) REFERENCES users(id))",
 
-        //"CREATE TABLE IF NOT EXISTS groups ("
-        //"id INT AUTO_INCREMENT PRIMARY KEY, "
-        //"name VARCHAR(255) NOT NULL, "
-        //"created_by INT NOT NULL, "
-        //"created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-        //"FOREIGN KEY (created_by) REFERENCES users(id))",
+        // Создание таблицы групп
+        "CREATE TABLE IF NOT EXISTS team ("
+        "id INT AUTO_INCREMENT PRIMARY KEY, "
+        "name VARCHAR(255) NOT NULL, "
+        "created_by INT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        "FOREIGN KEY (created_by) REFERENCES users(id))",
 
-        //"CREATE TABLE IF NOT EXISTS group_members ("
-        //"group_id INT NOT NULL, "
-        //"user_id INT NOT NULL, "
-        //"joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-        //"PRIMARY KEY (group_id, user_id), "
-        //"FOREIGN KEY (group_id) REFERENCES groups(id), "
-        //"FOREIGN KEY (user_id) REFERENCES users(id))"
+        // Создание таблицы членов группы
+        "CREATE TABLE IF NOT EXISTS team_members ("
+        "team_id INT NOT NULL, "
+        "user_id INT NOT NULL, "
+        "joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        "PRIMARY KEY (team_id, user_id), "
+        "FOREIGN KEY (team_id) REFERENCES team(id), "
+        "FOREIGN KEY (user_id) REFERENCES users(id))"
     };
 
     for (const auto& query : queries) {
@@ -142,43 +144,6 @@ void DatabaseHandler::save_message(const string& from, const string& to,
     if (mysql_query(connection_, query.c_str()) != 0) {
         cerr << "Ошибка запроса MySQL: " << mysql_error(connection_) << endl;
     }
-}
-
-json DatabaseHandler::get_message_history(const string& user1, const string& user2) {
-    lock_guard<mutex> lock(db_mutex_);
-    json result = json::array();
-
-    string query = "SELECT u1.username as sender, u2.username as receiver, "
-        "m.content, m.timestamp FROM messages m "
-        "JOIN users u1 ON m.sender_id = u1.id "
-        "LEFT JOIN users u2 ON m.receiver_id = u2.id "
-        "WHERE (u1.username = '" + user1 + "' AND u2.username = '" + user2 + "') "
-        "OR (u1.username = '" + user2 + "' AND u2.username = '" + user1 + "') "
-        "ORDER BY m.timestamp";
-
-    if (mysql_query(connection_, query.c_str()) != 0) {
-        cerr << "Ошибка запроса MySQL: " << mysql_error(connection_) << endl;
-        return result;
-    }
-
-    MYSQL_RES* sql_result = mysql_store_result(connection_);
-    if (!sql_result) {
-        return result;
-    }
-
-    MYSQL_ROW row;
-    while ((row = mysql_fetch_row(sql_result))) {
-        json message = {
-            {"from", row[0]},
-            {"to", row[1]},
-            {"content", row[2]},
-            {"timestamp", row[3]}
-        };
-        result.push_back(message);
-    }
-
-    mysql_free_result(sql_result);
-    return result;
 }
 
 bool DatabaseHandler::create_group(const string& group_name, const string& creator_username) {
@@ -295,6 +260,53 @@ string DatabaseHandler::register_user(const string& username, const string& pass
         cerr << "Ошибка регистрации: " << mysql_error(connection_) << endl;
         return message;
     }
-
     mysql_affected_rows(connection_) == 1;
 }
+
+// Передача истории сообщений в чат
+json DatabaseHandler::get_chat_messages(const string& username, const string& chat_id, bool is_group) {
+    lock_guard<mutex> lock(db_mutex_);
+    json messages = json::array();
+
+    string query;
+    if (is_group) {
+        query =
+            "SELECT u.username as sender, m.content, m.timestamp "
+            "FROM messages m "
+            "JOIN users u ON m.sender_id = u.id "
+            "WHERE m.group_id = (SELECT id FROM team WHERE name = '" + chat_id + "') "
+            "ORDER BY m.timestamp";
+    }
+    else {
+        query =
+        "SELECT u.username as sender, m.content, m.timestamp "
+            "FROM messages m "
+            "JOIN users u ON m.sender_id = u.id "
+            "WHERE (m.sender_id = (SELECT id FROM users WHERE username = '" + username + "') "
+            "AND m.receiver_id = (SELECT id FROM users WHERE username = '" + chat_id + "')) "
+            "OR (m.sender_id = (SELECT id FROM users WHERE username = '" + chat_id + "') "
+            "AND m.receiver_id = (SELECT id FROM users WHERE username = '" + username + "')) "
+            "ORDER BY m.timestamp";
+    }
+
+    if (mysql_query(connection_, query.c_str())) {
+        cerr << "Ошибка запроса истории чата: " << mysql_error(connection_) << endl;
+        return messages;
+    }
+
+    MYSQL_RES* result = mysql_store_result(connection_);
+    if (!result) return messages;
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result))) {
+        json message = {
+            {"from", row[0]},
+            {"content", row[1]},
+            {"timestamp", row[2]}
+        };
+        messages.push_back(message);
+    }
+
+    mysql_free_result(result);
+    return messages;
+};

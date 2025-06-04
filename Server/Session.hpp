@@ -22,8 +22,8 @@ private:
 
     void do_read();
     void process_message(const json& msg);
-    void handle_auth(const json& msg);
-    void handle_message(const json& msg);
+    json handle_auth(const json& msg);
+    void handle_message(const json& msg, bool is_group);
 
 public:
     Session(shared_ptr<ip::tcp::socket> socket, DatabaseHandler& db_handler);
