@@ -19,7 +19,6 @@ private:
     DatabaseHandler& db_handler_;
     weak_ptr<Connector> connector_;
     string username_;
-
     void do_read();
     void process_message(const json& msg);
     json handle_auth(const json& msg);

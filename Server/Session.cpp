@@ -31,7 +31,7 @@ void Session::do_read() {
             }
             else {
                 if (ec != error::operation_aborted) {
-                    cerr << "Ошибка чтения: " << ec.message() << endl;
+                    cerr << ec.message() << endl;
                     if (auto conn = connector_.lock()) conn->remove_session(self);
                 }
             }
@@ -179,7 +179,6 @@ json Session::handle_auth(const json& msg) {
             {"username", username_},
             {"message", "authorization is successful"}
         };
-        cout << "Успешная авторизация: " << username_ << endl;
     }
     else {
         response = {
@@ -187,7 +186,6 @@ json Session::handle_auth(const json& msg) {
             {"status", "failure"},
             {"message", "invalid username or password"}
         };
-        cerr << "Ошибка авторизации для: " << username << endl;
     }
     return response;
 }
@@ -201,9 +199,6 @@ void Session::handle_message(const json& msg, bool is_team) {
     // Пересылаем сообщение всем клиентам
     if (auto conn = connector_.lock()) {
         conn->broadcast_message(username_, to, content, is_team);
-    }
-    else {
-     cerr << "Ошибка: не удалось получить Connector для рассылки сообщения" << endl;
     }
 }
 

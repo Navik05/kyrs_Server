@@ -9,8 +9,6 @@ using namespace std;
 
 int main() {
     setlocale(LC_ALL, "ru");
-
-    // Порт на котором будет работать сервер
     unsigned int port = 52777;
 
     try {
@@ -28,7 +26,6 @@ int main() {
 
         // Общий указатель на сервер
         auto connector = make_shared<Connector>(context, port, db_handler);
-
         cout << "Сервер запущен, порт " << port << endl;
         context.run();
     }
@@ -36,6 +33,4 @@ int main() {
         cerr << "Исключение: " << e.what() << endl;
         return 1;
     }
-
-    return 0;
 }

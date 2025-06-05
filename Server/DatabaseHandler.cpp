@@ -99,18 +99,17 @@ bool DatabaseHandler::execute_query(const string& query) {
 
 // Проверка авторизации
 bool DatabaseHandler::authenticate_user(const string& username, const string& password_hash) {
-    string query = "SELECT password_hash FROM users WHERE username = '" +
-        username + "'";
+    bool auth_success = false;
+    string query = "SELECT password_hash FROM users WHERE username = '" + username + "'";
 
     if(!execute_query(query))
-        return false;
+        return auth_success;
 
     MYSQL_RES* result = mysql_store_result(connection_);
     if (!result) {
-        return false;
+        return auth_success;
     }
 
-    bool auth_success = false;
     MYSQL_ROW row = mysql_fetch_row(result);
     if (row) {
         string stored_hash = row[0];
@@ -214,33 +213,26 @@ json DatabaseHandler::get_user_team(const string& username) {
 
 // Регистрация пользователя
 string DatabaseHandler::register_user(const string& username, const string& password_hash) {
-    string message;
     // Проверка существования пользователя
     string check_query = "SELECT id FROM users WHERE username = '" + username + "'";
-
     if (!execute_query(check_query)){
-        cerr << "Ошибка проверки пользователя" << endl;
         return "User verification error";
     }
 
     MYSQL_RES* result = mysql_store_result(connection_);
-        if (result && mysql_num_rows(result) > 0) {
-            message = "The user already exists";
-            cerr << "Пользователь уже существует" << endl;
-            mysql_free_result(result);
-            return message;
-        }
-    if (result) mysql_free_result(result);
+    bool user_exists = (mysql_num_rows(result) > 0);
+    mysql_free_result(result);
+
+    if (user_exists) {
+        return "The user already exists";
+    }
 
     // Регистрация нового пользователя
-    string insert_query = "INSERT INTO users (username, password_hash) VALUES ('" +
-        username + "', '" + password_hash + "')";
-
-    if (!execute_query(check_query)) {
-        cerr << "Ошибка регистрации" << endl;
-        return "Registration error";
+    string insert_query = "INSERT INTO users (username, password_hash) VALUES ('" + username + "', '" + password_hash + "')";
+    if (!execute_query(insert_query)) {
+        return "Registration failed";
     }
-    mysql_affected_rows(connection_) == 1;
+    return "Registration successful";
 }
 
 // Передача истории сообщений в чат

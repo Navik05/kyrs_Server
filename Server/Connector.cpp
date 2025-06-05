@@ -33,7 +33,7 @@ void Connector::handle_accept(shared_ptr<ip::tcp::socket> socket, const boost::s
     else {
         cerr << "Ошибка подключения: " << error.message() << endl;
     }
-    
+
     // Ожидание новых подключений
     start_accept();
 }
